@@ -1,3 +1,7 @@
+# Hybrid CycleGAN pix2pix
+A pix2pix that incorporates cycle consistency (or, if you like, a CycleGAN that adds an L1 paired image loss). The goal of this project is to see if cycle consistency helps outperform conventional pix2pix.
+
+Forked from junyanz's pytorch-CycleGAN-and-pix2pix on 2020-12-23. The rest of the README.md below has been left unmodified.
 
 <img src='imgs/horse2zebra.gif' align="right" width=384>
 
