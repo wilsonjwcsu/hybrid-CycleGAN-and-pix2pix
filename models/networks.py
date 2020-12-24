@@ -485,19 +485,20 @@ class FCCAutoencoder(nn.Module):
         print(ngf*mult)
         model += [nn.Linear(4096, 256),
                   torch.nn.ReLU(True)]
- 
-        print("summary")
-        net = nn.Sequential(*model)
-        net = net.to(0)
-        summary(net,(3,256,256))
-
 
         # re-expand to 4096-dim
-        model += [nn.Linear(int(ngf*mult/8), ngf*mult),
-                  norm_layer(ngf*mult),
+        model += [nn.Linear(256,4096),
                   torch.nn.ReLU(True)]
 
+        # reshape to a 64x64 image
+        model += [nn.Unflatten(1,(1,64,64))]
 
+
+        model += [nn.ReflectionPad2d(1),
+                 nn.Conv2d(1, ngf*mult*2, kernel_size=3, padding=0, bias=use_bias),
+                 norm_layer(ngf*mult*2),
+                 nn.ReLU(True)]
+                 
         for i in range(n_downsampling):  # add upsampling layers
             mult = 2 ** (n_downsampling - i)
             model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2),
@@ -509,6 +510,12 @@ class FCCAutoencoder(nn.Module):
         model += [nn.ReflectionPad2d(3)]
         model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
         model += [nn.Tanh()]
+
+        print("summary")
+        net = nn.Sequential(*model)
+        net = net.to(0)
+        summary(net,(3,256,256))
+
 
         self.model = nn.Sequential(*model)
 
