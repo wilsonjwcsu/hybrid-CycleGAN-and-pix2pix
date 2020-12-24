@@ -1,5 +1,6 @@
 import os
 import torch
+from torchsummary import summary
 from collections import OrderedDict
 from abc import ABC, abstractmethod
 from . import networks
@@ -212,7 +213,8 @@ class BaseModel(ABC):
                 for param in net.parameters():
                     num_params += param.numel()
                 if verbose:
-                    print(net)
+                    #print(net)
+                    summary(net,(3,256,256))
                 print('[Network %s] Total number of parameters : %.3f M' % (name, num_params / 1e6))
         print('-----------------------------------------------')
 

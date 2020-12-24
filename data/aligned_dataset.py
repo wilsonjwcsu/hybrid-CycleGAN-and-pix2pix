@@ -42,8 +42,15 @@ class AlignedDataset(BaseDataset):
         # split AB image into A and B
         w, h = AB.size
         w2 = int(w / 2)
+	
         A = AB.crop((0, 0, w2, h))
         B = AB.crop((w2, 0, w, h))
+
+	# self-mapping if autoencoder specified
+        if self.opt.direction=='AtoA':
+            B = A
+        if self.opt.direction=='BtoB':
+            A = B
 
         # apply the same transform to both A and B
         transform_params = get_params(self.opt, A.size)

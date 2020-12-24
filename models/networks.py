@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
+from torchsummary import summary
 
 
 ###############################################################################
@@ -154,6 +155,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_256':
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
+    elif netG == 'FCC_GAN':
+    	net = FCCAutoencoder(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -246,8 +249,8 @@ class GANLoss(nn.Module):
 
         Returns:
             A label tensor filled with ground truth label, and with the size of the input
+        
         """
-
         if target_is_real:
             target_tensor = self.real_label
         else:
@@ -431,6 +434,87 @@ class ResnetBlock(nn.Module):
         """Forward function (with skip connections)"""
         out = x + self.conv_block(x)  # add skip connections
         return out
+
+class FCCAutoencoder(nn.Module):
+    """Autoencoder with fully-connected global layers
+    See FCC-GAN paper at https://arxiv.org/pdf/1905.02417.pdf
+
+    Adapted the ResnetGenerator code above as a template.
+    """
+
+    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, padding_type='reflect'):
+        """Construct a Resnet-based generator
+
+        Parameters:
+            input_nc (int)      -- the number of channels in input images
+            output_nc (int)     -- the number of channels in output images
+            ngf (int)           -- the number of filters in the last conv layer
+            norm_layer          -- normalization layer
+            use_dropout (bool)  -- if use dropout layers
+            n_blocks (int)      -- the number of ResNet blocks
+            padding_type (str)  -- the name of padding layer in conv layers: reflect | replicate | zero
+        """
+        super(FCCAutoencoder,self).__init__()
+        if type(norm_layer) == functools.partial:
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+
+        model = [nn.ReflectionPad2d(3),
+                 nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
+                 norm_layer(ngf),
+                 nn.ReLU(True)]
+
+        n_downsampling = 2
+        for i in range(n_downsampling):  # add downsampling layers
+            mult = 2 ** i
+            model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=2, padding=1, bias=use_bias),
+                      norm_layer(ngf * mult * 2),
+                      nn.ReLU(True)]
+
+#        mult = 2 ** n_downsampling
+
+        # after 2x downsampling layers, should be 64x64x__
+        # convert this to a 64*64=4096 latent code by a 1D conv
+        model += [nn.Conv2d(ngf*mult*2,1,kernel_size=1,stride=1,bias=use_bias),
+            nn.Flatten(1)]
+
+        # fully-connected global feature translation layers
+        
+        # squeeze from 4096-dim to 256-dim
+        print(ngf*mult)
+        model += [nn.Linear(4096, 256),
+                  torch.nn.ReLU(True)]
+ 
+        print("summary")
+        net = nn.Sequential(*model)
+        net = net.to(0)
+        summary(net,(3,256,256))
+
+
+        # re-expand to 4096-dim
+        model += [nn.Linear(int(ngf*mult/8), ngf*mult),
+                  norm_layer(ngf*mult),
+                  torch.nn.ReLU(True)]
+
+
+        for i in range(n_downsampling):  # add upsampling layers
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2),
+                                         kernel_size=3, stride=2,
+                                         padding=1, output_padding=1,
+                                         bias=use_bias),
+                      norm_layer(int(ngf * mult / 2)),
+                      nn.ReLU(True)]
+        model += [nn.ReflectionPad2d(3)]
+        model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        model += [nn.Tanh()]
+
+        self.model = nn.Sequential(*model)
+
+    def forward(self, input):
+        """Standard forward"""
+        return self.model(input)
 
 
 class UnetGenerator(nn.Module):
