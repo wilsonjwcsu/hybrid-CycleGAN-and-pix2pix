@@ -484,7 +484,7 @@ class FCCAutoencoder(nn.Module):
         # squeeze from 4096-dim to 256-dim
         print(ngf*mult)
         model += [nn.Linear(4096, 256),
-                  torch.nn.ReLU(True)]
+                  torch.nn.Tanh()]
 
         # re-expand to 4096-dim
         model += [nn.Linear(256,4096),
