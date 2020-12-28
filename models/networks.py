@@ -155,7 +155,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_256':
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
-    elif netG == 'FCC_GAN':
+    elif netG == 'fcc':
     	net = FCCAutoencoder(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
@@ -201,6 +201,8 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal'
         net = NLayerDiscriminator(input_nc, ndf, n_layers_D, norm_layer=norm_layer)
     elif netD == 'pixel':     # classify if each pixel is real or fake
         net = PixelDiscriminator(input_nc, ndf, norm_layer=norm_layer)
+    elif netD == 'fcc': # mixed fully-connected and convolutional discriminator
+        net = FCCDiscriminator(input_nc, ndf, n_layers=5, norm_layer=norm_layer)
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % netD)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -511,7 +513,7 @@ class FCCAutoencoder(nn.Module):
         model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
         model += [nn.Tanh()]
 
-        print("summary")
+        print("--- GENERATOR SUMMARY ---")
         net = nn.Sequential(*model)
         net = net.to(0)
         summary(net,(3,256,256))
@@ -667,6 +669,73 @@ class NLayerDiscriminator(nn.Module):
         ]
 
         sequence += [nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
+
+        print("--- DISCRIMINATOR SUMMARY ---")
+        net = nn.Sequential(*sequence)
+        net = net.to(0)
+        summary(net,(3,256,256))
+
+
+        self.model = nn.Sequential(*sequence)
+
+    def forward(self, input):
+        """Standard forward."""
+        return self.model(input)
+
+class FCCDiscriminator(nn.Module):
+    """Defines a FCC-GAN discriminator"""
+
+    def __init__(self, input_nc, ndf=64, n_layers=5, norm_layer=nn.BatchNorm2d):
+        """Construct a FCC-GAN discriminator
+
+        Parameters:
+            input_nc (int)  -- the number of channels in input images
+            ndf (int)       -- the number of filters in the last conv layer
+            n_layers (int)  -- the number of conv layers in the discriminator
+            norm_layer      -- normalization layer
+        """
+        super(FCCDiscriminator, self).__init__()
+        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+
+        kw = 4
+        padw = 1
+        sequence = [nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]
+        nf_mult = 1
+        nf_mult_prev = 1
+        for n in range(1, n_layers):  # gradually increase the number of filters
+            nf_mult_prev = nf_mult
+            nf_mult = min(2 ** n, 8)
+            sequence += [
+                nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw, bias=use_bias),
+                norm_layer(ndf * nf_mult),
+                nn.LeakyReLU(0.2, True)
+            ]
+
+        nf_mult_prev = nf_mult
+        nf_mult = min(2 ** n_layers, 8)
+
+        # for a 256x256 input, we should be down to a 128x8x8 (8192-dimensional) tensor here
+        sequence += [nn.Flatten(1), 
+                        nn.Linear(8192,4096),
+                        nn.ReLU(True),
+                        nn.Linear(4096,512),
+                        nn.ReLU(True),
+                        nn.Linear(512,64),
+                        nn.ReLU(True),
+                        nn.Linear(64,16),
+                        nn.ReLU(True),
+                        nn.Linear(16,1),
+                        nn.Sigmoid()]
+        
+        print("--- DISCRIMINATOR SUMMARY ---")
+        net = nn.Sequential(*sequence)
+        net = net.to(0)
+        summary(net,(3,256,256))
+
+
         self.model = nn.Sequential(*sequence)
 
     def forward(self, input):
