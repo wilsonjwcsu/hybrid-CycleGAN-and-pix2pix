@@ -462,35 +462,71 @@ class FCCAutoencoder(nn.Module):
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
 
-        model = [nn.ReflectionPad2d(3),
-                 nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
-                 norm_layer(ngf),
+        # encoder
+        # top-level convolutions, 256x256
+        model = [nn.Conv2d(input_nc,64,kernel_size=3,padding=1,bias=use_bias),
+                 norm_layer(64),
+                 nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(64,64,kernel_size=3,padding=1,bias=use_bias),
+                 norm_layer(64),
                  nn.LeakyReLU(0.2,True)]
 
-        n_downsampling = 5
-        for i in range(n_downsampling):  # add downsampling layers
-            mult = 2 ** i
-            model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=2, padding=1, bias=use_bias),
-                      norm_layer(ngf * mult * 2),
-                      nn.LeakyReLU(0.2,True)]
+        # downsample to 128x128
+        model += [nn.Conv2d(64,128,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(128),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(128,128,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(128),
+                nn.LeakyReLU(0.2,True)]
 
-#        mult = 2 ** n_downsampling
+        # downsample to 64x64
+        model += [nn.Conv2d(128,256,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(256),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(256,256,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(256),
+                nn.LeakyReLU(0.2,True)]
 
-        # final conv to translate to 128x8x8 = 8192-dim input to fully connected layers
-        model += [nn.Conv2d(ngf * mult * 2, 128, kernel_size=3, stride=1, padding=1, bias=use_bias),
-                  norm_layer(128),
-                  nn.LeakyReLU(0.2,True)]
+        # downsample to 32x32
+        model += [nn.Conv2d(256,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
 
+        # downsample to 16x16
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
 
-        # after 2x downsampling layers, should be 128x8x8 = 8192-dimensional
+        # downsample to 8x8
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+
+        # downsample to 4x4
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+
+        # after downsampling layers, should be 512x4x4 = 8192-dimensional
         # convert this to a 8192-dimensional latent code by flattening
         model += [nn.Flatten(1)]
 
         # fully-connected global feature translation layers
         
  
-       # squeeze from 8192-dim to 256-dim latent vector
-        print(ngf*mult)
+        # squeeze from 8192-dim to 256-dim latent vector
         model += [nn.Linear(8192,4096),
                   nn.LeakyReLU(0.2,True),
                   nn.Linear(4096, 256),
@@ -500,34 +536,71 @@ class FCCAutoencoder(nn.Module):
         model += [nn.Linear(256,4096),
                   torch.nn.LeakyReLU(0.2,True),
                   nn.Linear(4096,8192),
+                  torch.nn.LeakyReLU(0.2,True)
                   ]
 
         # reshape to a stack of 128 8x8 features
-        model += [nn.Unflatten(1,(128,8,8))]
+        model += [nn.Unflatten(1,(512,4,4))]
 
+        # upsample to 512x8x8
+        model += [nn.ConvTranspose2d(512,512,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
 
-        model += [nn.ReflectionPad2d(1),
-                 nn.Conv2d(128, ngf*mult*2, kernel_size=3, padding=0, bias=use_bias),
-                 norm_layer(ngf*mult*2),
-                 nn.LeakyReLU(0.2,True)]
-               
-        for i in range(n_downsampling):  # add upsampling layers
-            mult = 2 ** (n_downsampling - i)
-            model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2),
-                                         kernel_size=3, stride=2,
-                                         padding=1, output_padding=1,
-                                         bias=use_bias),
-                      norm_layer(int(ngf * mult / 2)),
-                      nn.LeakyReLU(0.2,True)]
-        model += [nn.ReflectionPad2d(3)]
-        model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
-        model += [nn.Tanh()]
+        # upsample to 512x16x16
+        model += [nn.ConvTranspose2d(512,512,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+
+        # upsample to 512x32x32
+        model += [nn.ConvTranspose2d(512,512,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+
+        # upsample to 256x64x64
+        model += [nn.ConvTranspose2d(512,256,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
+                norm_layer(256),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(256,256,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(256),
+                nn.LeakyReLU(0.2,True)]
+
+        # upsample to 128x128x128
+        model += [nn.ConvTranspose2d(256,128,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
+                norm_layer(128),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(128,128,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(128),
+                nn.LeakyReLU(0.2,True)]
+
+        # upsample to 64x256x256
+        model += [nn.ConvTranspose2d(128,64,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
+                norm_layer(64),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(64,64,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(64),
+                nn.LeakyReLU(0.2,True)]
+
+        # final conv to nc
+        model += [nn.Conv2d(64,output_nc,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(output_nc),
+                nn.Tanh()]
 
         print("--- GENERATOR SUMMARY ---")
         net = nn.Sequential(*model)
         net = net.to(0)
         summary(net,(3,256,256))
 
+              
         self.model = nn.Sequential(*model)
 
     def forward(self, input):
@@ -709,25 +782,70 @@ class FCCDiscriminator(nn.Module):
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
 
-        kw = 4
-        padw = 1
-        sequence = [nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]
-        nf_mult = 1
-        nf_mult_prev = 1
-        for n in range(1, n_layers):  # gradually increase the number of filters
-            nf_mult_prev = nf_mult
-            nf_mult = min(2 ** n, 8)
-            sequence += [
-                nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw, bias=use_bias),
-                norm_layer(ndf * nf_mult),
-                nn.LeakyReLU(0.2, True)
-            ]
+        # encoder
+        # top-level convolutions, 256x256
+        model = [nn.Conv2d(input_nc,64,kernel_size=3,padding=1,bias=use_bias),
+                 norm_layer(64),
+                 nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(64,64,kernel_size=3,padding=1,bias=use_bias),
+                 norm_layer(64),
+                 nn.LeakyReLU(0.2,True)]
 
-        nf_mult_prev = nf_mult
-        nf_mult = min(2 ** n_layers, 8)
+        # downsample to 128x128
+        model += [nn.Conv2d(64,128,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(128),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(128,128,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(128),
+                nn.LeakyReLU(0.2,True)]
+
+        # downsample to 64x64
+        model += [nn.Conv2d(128,256,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(256),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(256,256,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(256),
+                nn.LeakyReLU(0.2,True)]
+
+        # downsample to 32x32
+        model += [nn.Conv2d(256,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+
+        # downsample to 16x16
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+
+        # downsample to 8x8
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+
+        # downsample to 4x4
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
+                norm_layer(512),
+                nn.LeakyReLU(0.2,True)]
+
+        # after downsampling layers, should be 512x4x4 = 8192-dimensional
+        # convert this to a 8192-dimensional latent code by flattening
+        model += [nn.Flatten(1)]
+
 
         # for a 256x256 input, we should be down to a 128x8x8 (8192-dimensional) tensor here
-        sequence += [nn.Flatten(1), 
+        model += [nn.Flatten(1), 
                         nn.Linear(8192,4096),
                         nn.ReLU(True),
                         nn.Linear(4096,512),
@@ -736,16 +854,15 @@ class FCCDiscriminator(nn.Module):
                         nn.ReLU(True),
                         nn.Linear(64,16),
                         nn.ReLU(True),
-                        nn.Linear(16,1),
-                        nn.Sigmoid()]
+                        nn.Linear(16,1)]
         
         print("--- DISCRIMINATOR SUMMARY ---")
-        net = nn.Sequential(*sequence)
+        net = nn.Sequential(*model)
         net = net.to(0)
         summary(net,(3,256,256))
 
 
-        self.model = nn.Sequential(*sequence)
+        self.model = nn.Sequential(*model)
 
     def forward(self, input):
         """Standard forward."""
