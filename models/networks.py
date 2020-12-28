@@ -156,7 +156,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     elif netG == 'unet_256':
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'fcc':
-    	net = FCCAutoencoder(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
+    	net = FCCAutoencoder(input_nc, output_nc, ngf=32, norm_layer=norm_layer, use_dropout=use_dropout)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -444,7 +444,7 @@ class FCCAutoencoder(nn.Module):
     Adapted the ResnetGenerator code above as a template.
     """
 
-    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, padding_type='reflect'):
+    def __init__(self, input_nc, output_nc, ngf=8, norm_layer=nn.BatchNorm2d, use_dropout=False, padding_type='reflect'):
         """Construct a Resnet-based generator
 
         Parameters:
@@ -465,42 +465,52 @@ class FCCAutoencoder(nn.Module):
         model = [nn.ReflectionPad2d(3),
                  nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
                  norm_layer(ngf),
-                 nn.ReLU(True)]
+                 nn.LeakyReLU(0.2,True)]
 
-        n_downsampling = 2
+        n_downsampling = 5
         for i in range(n_downsampling):  # add downsampling layers
             mult = 2 ** i
             model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=2, padding=1, bias=use_bias),
                       norm_layer(ngf * mult * 2),
-                      nn.ReLU(True)]
+                      nn.LeakyReLU(0.2,True)]
 
 #        mult = 2 ** n_downsampling
 
-        # after 2x downsampling layers, should be 64x64x__
-        # convert this to a 64*64=4096 latent code by a 1D conv
-        model += [nn.Conv2d(ngf*mult*2,1,kernel_size=1,stride=1,bias=use_bias),
-            nn.Flatten(1)]
+        # final conv to translate to 128x8x8 = 8192-dim input to fully connected layers
+        model += [nn.Conv2d(ngf * mult * 2, 128, kernel_size=3, stride=1, padding=1, bias=use_bias),
+                  norm_layer(128),
+                  nn.LeakyReLU(0.2,True)]
+
+
+        # after 2x downsampling layers, should be 128x8x8 = 8192-dimensional
+        # convert this to a 8192-dimensional latent code by flattening
+        model += [nn.Flatten(1)]
 
         # fully-connected global feature translation layers
         
-        # squeeze from 4096-dim to 256-dim
+ 
+       # squeeze from 8192-dim to 256-dim latent vector
         print(ngf*mult)
-        model += [nn.Linear(4096, 256),
+        model += [nn.Linear(8192,4096),
+                  nn.LeakyReLU(0.2,True),
+                  nn.Linear(4096, 256),
                   torch.nn.Tanh()]
 
-        # re-expand to 4096-dim
+        # re-expand to 8192-dim
         model += [nn.Linear(256,4096),
-                  torch.nn.ReLU(True)]
+                  torch.nn.LeakyReLU(0.2,True),
+                  nn.Linear(4096,8192),
+                  ]
 
-        # reshape to a 64x64 image
-        model += [nn.Unflatten(1,(1,64,64))]
+        # reshape to a stack of 128 8x8 features
+        model += [nn.Unflatten(1,(128,8,8))]
 
 
         model += [nn.ReflectionPad2d(1),
-                 nn.Conv2d(1, ngf*mult*2, kernel_size=3, padding=0, bias=use_bias),
+                 nn.Conv2d(128, ngf*mult*2, kernel_size=3, padding=0, bias=use_bias),
                  norm_layer(ngf*mult*2),
-                 nn.ReLU(True)]
-                 
+                 nn.LeakyReLU(0.2,True)]
+               
         for i in range(n_downsampling):  # add upsampling layers
             mult = 2 ** (n_downsampling - i)
             model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2),
@@ -508,7 +518,7 @@ class FCCAutoencoder(nn.Module):
                                          padding=1, output_padding=1,
                                          bias=use_bias),
                       norm_layer(int(ngf * mult / 2)),
-                      nn.ReLU(True)]
+                      nn.LeakyReLU(0.2,True)]
         model += [nn.ReflectionPad2d(3)]
         model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
         model += [nn.Tanh()]
@@ -517,7 +527,6 @@ class FCCAutoencoder(nn.Module):
         net = nn.Sequential(*model)
         net = net.to(0)
         summary(net,(3,256,256))
-
 
         self.model = nn.Sequential(*model)
 
