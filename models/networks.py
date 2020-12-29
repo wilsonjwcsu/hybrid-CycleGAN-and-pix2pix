@@ -611,10 +611,10 @@ class FCCAutoencoder(nn.Module):
                 norm_layer(output_nc),
                 nn.Tanh()]
 
-        print("--- GENERATOR SUMMARY ---")
-        net = nn.Sequential(*model)
-        net = net.to(0)
-        summary(net,(3,256,256))
+        #print("--- GENERATOR SUMMARY ---")
+        #net = nn.Sequential(*model)
+        #net = net.to(0)
+        #summary(net,(3,256,256))
 
               
         self.model = nn.Sequential(*model)
@@ -732,10 +732,10 @@ class FCCResnetAutoencoder(nn.Module):
                 norm_layer(output_nc),
                 nn.Tanh()]
 
-        print("--- GENERATOR SUMMARY ---")
-        net = nn.Sequential(*model)
-        net = net.to(0)
-        summary(net,(3,256,256))
+        #print("--- GENERATOR SUMMARY ---")
+        #net = nn.Sequential(*model)
+        #net = net.to(0)
+        #summary(net,(3,256,256))
 
               
         self.model = nn.Sequential(*model)
@@ -889,10 +889,10 @@ class NLayerDiscriminator(nn.Module):
 
         sequence += [nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
 
-        print("--- DISCRIMINATOR SUMMARY ---")
-        net = nn.Sequential(*sequence)
-        net = net.to(0)
-        summary(net,(3,256,256))
+        #print("--- DISCRIMINATOR SUMMARY ---")
+        #net = nn.Sequential(*sequence)
+        #net = net.to(0)
+        #summary(net,(3,256,256))
 
 
         self.model = nn.Sequential(*sequence)
@@ -993,10 +993,10 @@ class FCCDiscriminator(nn.Module):
                         nn.ReLU(True),
                         nn.Linear(16,1)]
         
-        print("--- DISCRIMINATOR SUMMARY ---")
-        net = nn.Sequential(*model)
-        net = net.to(0)
-        summary(net,(3,256,256))
+        #print("--- DISCRIMINATOR SUMMARY ---")
+        #net = nn.Sequential(*model)
+        #net = net.to(0)
+        #summary(net,(3,256,256))
 
 
         self.model = nn.Sequential(*model)
