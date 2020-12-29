@@ -205,6 +205,8 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal'
         net = PixelDiscriminator(input_nc, ndf, norm_layer=norm_layer)
     elif netD == 'fcc': # mixed fully-connected and convolutional discriminator
         net = FCCDiscriminator(input_nc, ndf, n_layers=5, norm_layer=norm_layer)
+    elif netD == 'fcc_resnet': # mixed fully-connected and convolutional discriminator
+        net = FCCResnetDiscriminator(input_nc, ndf, n_layers=5, norm_layer=norm_layer)
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % netD)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -975,6 +977,84 @@ class FCCDiscriminator(nn.Module):
         model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
                 norm_layer(512),
                 nn.LeakyReLU(0.2,True)]
+
+        # after downsampling layers, should be 512x4x4 = 8192-dimensional
+        # convert this to a 8192-dimensional latent code by flattening
+        model += [nn.Flatten(1)]
+
+
+        # for a 256x256 input, we should be down to a 128x8x8 (8192-dimensional) tensor here
+        model += [nn.Flatten(1), 
+                        nn.Linear(8192,4096),
+                        nn.ReLU(True),
+                        nn.Linear(4096,512),
+                        nn.ReLU(True),
+                        nn.Linear(512,64),
+                        nn.ReLU(True),
+                        nn.Linear(64,16),
+                        nn.ReLU(True),
+                        nn.Linear(16,1)]
+        
+        #print("--- DISCRIMINATOR SUMMARY ---")
+        #net = nn.Sequential(*model)
+        #net = net.to(0)
+        #summary(net,(3,256,256))
+
+
+        self.model = nn.Sequential(*model)
+
+    def forward(self, input):
+        """Standard forward."""
+        return self.model(input)
+
+class FCCResnetDiscriminator(nn.Module):
+    """Defines a FCC-GAN discriminator with resnet downsamplers"""
+
+    def __init__(self, input_nc, ndf=64, n_layers=5, norm_layer=nn.BatchNorm2d):
+        """Construct a FCC-GAN discriminator with resnet downsamplers
+
+        Parameters:
+            input_nc (int)  -- the number of channels in input images
+            ndf (int)       -- the number of filters in the last conv layer
+            n_layers (int)  -- the number of conv layers in the discriminator
+            norm_layer      -- normalization layer
+        """
+        super(FCCResnetDiscriminator, self).__init__()
+        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+
+        padding_type = 'zero'
+        use_dropout = True
+
+        # encoder
+        # top-level convolutions, 256x256, 64 features
+        model = [ResnetBlock(64,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=input_nc)]
+
+        # downsample to 128x128, 128 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(128,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=64)]
+
+        # downsample to 64x64, 256 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(256,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=128)]
+
+        # downsample to 32x32, 512 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(512,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=256)]
+
+        # downsample to 16x16, 512 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(512,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=512)]
+
+        # downsample to 8x8, 512 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(512,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=512)]
+
+        # downsample to 4x4, 512 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(512,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=512)]
 
         # after downsampling layers, should be 512x4x4 = 8192-dimensional
         # convert this to a 8192-dimensional latent code by flattening
