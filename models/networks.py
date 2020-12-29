@@ -446,11 +446,9 @@ class ResnetBlock(nn.Module):
             out = x + self.conv_block(x)  # add skip connections
         elif self.dim_out > self.dim_in:
             x_pad = nn.functional.pad(x,(0,0,0,0,0,self.dim_out-self.dim_in))
-            print(x_pad.shape)
-            print(self.conv_block(x).shape)
             out = x_pad + self.conv_block(x)
         else:
-            x_trim = x[0:(self.dim_out-1),:,:]
+            x_trim = x[:,0:(self.dim_out),:,:]
             out = x_trim + self.conv_block(x)
 
         return out
@@ -633,7 +631,7 @@ class FCCResnetAutoencoder(nn.Module):
     Adapted the ResnetGenerator code above as a template.
     """
 
-    def __init__(self, input_nc, output_nc, ngf=8, norm_layer=nn.BatchNorm2d, use_dropout=False, padding_type='reflect'):
+    def __init__(self, input_nc, output_nc, ngf=8, norm_layer=nn.BatchNorm2d, use_dropout=False, padding_type='zero'):
         """Construct a Resnet-based generator
 
         Parameters:
@@ -652,69 +650,33 @@ class FCCResnetAutoencoder(nn.Module):
             use_bias = norm_layer == nn.InstanceNorm2d
 
         # encoder
-        # top-level convolutions, 256x256
-        model = [nn.Conv2d(input_nc,64,kernel_size=3,padding=1,bias=use_bias),
-                 norm_layer(64),
-                 nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(64,64,kernel_size=3,padding=1,bias=use_bias),
-                 norm_layer(64),
-                 nn.LeakyReLU(0.2,True)]
-
+        # top-level convolutions, 256x256, 64 features
         model = [ResnetBlock(64,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=input_nc)]
 
-        print("--- PARTIAL GENERATOR SUMMARY ---")
-        net = nn.Sequential(*model)
-        net = net.to(0)
-        summary(net,(3,256,256))
+        # downsample to 128x128, 128 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(128,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=64)]
 
+        # downsample to 64x64, 256 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(256,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=128)]
 
-        # downsample to 128x128
-        model += [nn.Conv2d(64,128,kernel_size=3,stride=2,padding=1,bias=use_bias),
-                norm_layer(128),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(128,128,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(128),
-                nn.LeakyReLU(0.2,True)]
+        # downsample to 32x32, 512 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(512,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=256)]
 
-        # downsample to 64x64
-        model += [nn.Conv2d(128,256,kernel_size=3,stride=2,padding=1,bias=use_bias),
-                norm_layer(256),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(256,256,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(256),
-                nn.LeakyReLU(0.2,True)]
+        # downsample to 16x16, 512 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(512,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=512)]
 
-        # downsample to 32x32
-        model += [nn.Conv2d(256,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
+        # downsample to 8x8, 512 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(512,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=512)]
 
-        # downsample to 16x16
-        model += [nn.Conv2d(512,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
+        # downsample to 4x4, 512 features
+        model += [nn.AvgPool2d(2)]
+        model += [ResnetBlock(512,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=512)]
 
-        # downsample to 8x8
-        model += [nn.Conv2d(512,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
-
-        # downsample to 4x4
-        model += [nn.Conv2d(512,512,kernel_size=3,stride=2,padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
 
         # after downsampling layers, should be 512x4x4 = 8192-dimensional
         # convert this to a 8192-dimensional latent code by flattening
@@ -736,56 +698,34 @@ class FCCResnetAutoencoder(nn.Module):
                   torch.nn.LeakyReLU(0.2,True)
                   ]
 
-        # reshape to a stack of 128 8x8 features
+        # reshape to a stack of 4x4, 512 features
         model += [nn.Unflatten(1,(512,4,4))]
 
-        # upsample to 512x8x8
-        model += [nn.ConvTranspose2d(512,512,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
+        # upsample to 8x8, 512 features
+        model += [nn.Upsample(scale_factor=2,mode='bilinear')]
+        model += [ResnetBlock(512,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=512)]
 
-        # upsample to 512x16x16
-        model += [nn.ConvTranspose2d(512,512,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
+        # upsample to 16x16, 512 features
+        model += [nn.Upsample(scale_factor=2,mode='bilinear')]
+        model += [ResnetBlock(512,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=512)]
 
-        # upsample to 512x32x32
-        model += [nn.ConvTranspose2d(512,512,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(512,512,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(512),
-                nn.LeakyReLU(0.2,True)]
+        # upsample to 32x32, 512 features
+        model += [nn.Upsample(scale_factor=2,mode='bilinear')]
+        model += [ResnetBlock(512,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=512)]
 
-        # upsample to 256x64x64
-        model += [nn.ConvTranspose2d(512,256,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
-                norm_layer(256),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(256,256,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(256),
-                nn.LeakyReLU(0.2,True)]
 
-        # upsample to 128x128x128
-        model += [nn.ConvTranspose2d(256,128,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
-                norm_layer(128),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(128,128,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(128),
-                nn.LeakyReLU(0.2,True)]
+        # upsample to 64x64, 256 features
+        model += [nn.Upsample(scale_factor=2,mode='bilinear')]
+        model += [ResnetBlock(256,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=512)]
 
-        # upsample to 64x256x256
-        model += [nn.ConvTranspose2d(128,64,kernel_size=3,stride=2,padding=1,output_padding=1,bias=use_bias),
-                norm_layer(64),
-                nn.LeakyReLU(0.2,True)]
-        model += [nn.Conv2d(64,64,kernel_size=3,stride=1,padding=1,bias=use_bias),
-                norm_layer(64),
-                nn.LeakyReLU(0.2,True)]
+        # upsample to 128x128, 128 features
+        model += [nn.Upsample(scale_factor=2,mode='bilinear')]
+        model += [ResnetBlock(128,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=256)]
+
+        # upsample to 256x256, 64 features
+        model += [nn.Upsample(scale_factor=2,mode='bilinear')]
+        model += [ResnetBlock(64,padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias, dim_in=128)]
+
 
         # final conv to nc
         model += [nn.Conv2d(64,output_nc,kernel_size=3,stride=1,padding=1,bias=use_bias),
