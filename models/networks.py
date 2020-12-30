@@ -278,9 +278,9 @@ class GANLoss(nn.Module):
             loss = self.loss(prediction, target_tensor)
         elif self.gan_mode == 'wgangp':
             if target_is_real:
-                loss = -prediction.mean()
+                loss = -1e-6*prediction.mean()
             else:
-                loss = prediction.mean()
+                loss = 1e-6*prediction.mean()
         return loss
 
 

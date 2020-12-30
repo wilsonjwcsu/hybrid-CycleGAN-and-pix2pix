@@ -33,7 +33,7 @@ class Pix2PixModel(BaseModel):
         if is_train:
             parser.set_defaults(pool_size=0, gan_mode='vanilla')
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
-
+            parser.add_argument('--alternate', action='store_true', help='alternate between adversarial and L1 loss every other epoch')
         return parser
 
     def __init__(self, opt):
@@ -73,6 +73,17 @@ class Pix2PixModel(BaseModel):
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
+	    	# options for alternating adversarial and L1 loss every other epoch
+            self.enableL1Loss = True
+            self.enableAdversarialLoss = True
+            if opt.alternate:
+                self.enableL1Loss = False
+
+    def toggle_loss(self):
+        """toggle between adversarial loss and L1 loss"""
+        if self.opt.alternate:
+            self.enableL1Loss = not self.enableL1Loss
+            self.enableAdversarialLoss = not self.enableAdversarialLoss
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
@@ -123,7 +134,15 @@ class Pix2PixModel(BaseModel):
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
         # combine loss and calculate gradients
-        self.loss_G = self.loss_G_GAN + self.loss_G_L1
+        if self.enableAdversarialLoss and self.enableL1Loss:
+            self.loss_G = self.loss_G_GAN + self.loss_G_L1
+        elif self.enableAdversarialLoss and not(self.enableL1Loss):
+            self.loss_G = self.loss_G_GAN
+        elif not(self.enableAdversarialLoss) and self.enableL1Loss:
+            self.loss_G = self.loss_G_L1
+        else:
+            raise RuntimeError("Somehow both adversarial and L1 losses got disabled!")
+            
         self.loss_G.backward()
 
     def optimize_parameters(self):
@@ -132,7 +151,8 @@ class Pix2PixModel(BaseModel):
         self.set_requires_grad(self.netD, True)  # enable backprop for D
         self.optimizer_D.zero_grad()     # set D's gradients to zero
         self.backward_D()                # calculate gradients for D
-        self.optimizer_D.step()          # update D's weights
+        if self.enableAdversarialLoss:
+            self.optimizer_D.step()          # update D's weights
         # update G
         self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
         self.optimizer_G.zero_grad()        # set G's gradients to zero
