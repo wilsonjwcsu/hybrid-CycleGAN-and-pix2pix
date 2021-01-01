@@ -75,7 +75,9 @@ def get_params(opt, size):
 
     flip = random.random() > 0.5
 
-    return {'crop_pos': (x, y), 'flip': flip}
+    angle = 360*random.random()
+
+    return {'crop_pos': (x, y), 'flip': flip, 'angle': angle}
 
 
 def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True):
@@ -88,10 +90,20 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
     elif 'scale_width' in opt.preprocess:
         transform_list.append(transforms.Lambda(lambda img: __scale_width(img, opt.load_size, opt.crop_size, method)))
 
+    if not opt.no_flip:
+        if params is None:
+            transform_list.append(transforms.RandomHorizontalFlip())
+        elif params['flip']:
+            transform_list.append(transforms.Lambda(lambda img: __flip(img, params['flip'])))
+
     if opt.preprocess == 'rotate_and_crop':
-        transform_list.append(transforms.RandomHorizontalFlip())
-        transform_list.append(transforms.RandomRotation(180))
-        transform_list.append(transforms.RandomCrop(opt.crop_size))
+        if params is None: 
+            # not working with an aligned image pair
+            transform_list.append(transforms.RandomRotation(180))
+        elif params['angle']:
+            # working with aligned pair. Use angle specified by get_params()
+            # so that both A and B get rotated the same amount
+            transform_list.append(transforms.Lambda(lambda img: __rotate(img, params['angle'])))
 
     if 'crop' in opt.preprocess:
         if params is None:
@@ -103,11 +115,6 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
         transform_list.append(transforms.Lambda(lambda img: __make_power_2(img, base=4, method=method)))
 
 
-    if not opt.no_flip:
-        if params is None:
-            transform_list.append(transforms.RandomHorizontalFlip())
-        elif params['flip']:
-            transform_list.append(transforms.Lambda(lambda img: __flip(img, params['flip'])))
 
     if convert:
         transform_list += [transforms.ToTensor()]
@@ -146,6 +153,9 @@ def __crop(img, pos, size):
     if (ow > tw or oh > th):
         return img.crop((x1, y1, x1 + tw, y1 + th))
     return img
+
+def __rotate(img, angle, method=Image.BICUBIC):
+    return img.rotate(angle, method)
 
 
 def __flip(img, flip):
