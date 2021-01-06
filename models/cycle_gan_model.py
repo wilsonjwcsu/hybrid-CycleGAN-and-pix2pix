@@ -41,9 +41,10 @@ class CycleGANModel(BaseModel):
             parser.add_argument('--lambda_A', type=float, default=10.0, help='weight for cycle loss (A -> B -> A)')
             parser.add_argument('--lambda_B', type=float, default=10.0, help='weight for cycle loss (B -> A -> B)')
             parser.add_argument('--lambda_identity', type=float, default=0.5, help='use identity mapping. Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1')
-            parser.add_argument('--hybrid', action='store_true', help='Combine pix2pix and CycleGAN by adding paired image L1 loss to CycleGAN')
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for paired image L1 loss')
 
+        parser.add_argument('--hybrid', action='store_true', help='Combine pix2pix and CycleGAN by adding paired image L1 loss to CycleGAN')
+        
         return parser
 
     def __init__(self, opt):
@@ -56,6 +57,8 @@ class CycleGANModel(BaseModel):
 	
         if opt.hybrid:
             self.usePairedL1Loss = True
+        else:
+            self.usePairedL1Loss = False
 
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
         if self.usePairedL1Loss:
