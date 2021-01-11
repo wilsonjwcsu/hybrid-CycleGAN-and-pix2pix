@@ -187,17 +187,32 @@ class Visualizer():
         if not hasattr(self, 'plot_data'):
             self.plot_data = {'X': [], 'Y': [], 'legend': list(losses.keys())}
         self.plot_data['X'].append(epoch + counter_ratio)
-        self.plot_data['Y'].append([losses[k] for k in self.plot_data['legend']])
+        if len(losses) > 1:
+            self.plot_data['Y'].append([losses[k] for k in self.plot_data['legend']])
+        else:
+            self.plot_data['Y'].append(losses[self.plot_data['legend'][0]])
+
         try:
-            self.vis.line(
-                X=np.stack([np.array(self.plot_data['X'])] * len(self.plot_data['legend']), 1),
-                Y=np.array(self.plot_data['Y']),
-                opts={
-                    'title': self.name + ' loss over time',
-                    'legend': self.plot_data['legend'],
-                    'xlabel': 'epoch',
-                    'ylabel': 'loss'},
-                win=self.display_id)
+            if len(self.plot_data['legend']) == 1:
+                self.vis.line(
+                    X=np.array(self.plot_data['X']),
+                    Y=np.array(self.plot_data['Y']),
+                    opts={
+                        'title': self.name + ' loss over time',
+                        'legend': self.plot_data['legend'],
+                        'xlabel': 'epoch',
+                        'ylabel': 'loss'},
+                    win=self.display_id)
+            else:
+                self.vis.line(
+                    X=np.stack([np.array(self.plot_data['X'])] * len(self.plot_data['legend']), 1),
+                    Y=np.array(self.plot_data['Y']),
+                    opts={
+                        'title': self.name + ' loss over time',
+                        'legend': self.plot_data['legend'],
+                        'xlabel': 'epoch',
+                        'ylabel': 'loss'},
+                    win=self.display_id)
         except VisdomExceptionBase:
             self.create_visdom_connections()
 
