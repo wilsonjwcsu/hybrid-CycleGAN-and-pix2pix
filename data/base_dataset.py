@@ -114,7 +114,8 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
     if opt.preprocess == 'none':
         transform_list.append(transforms.Lambda(lambda img: __make_power_2(img, base=4, method=method)))
 
-
+    if (opt.brightness_jitter > 0.) or (opt.contrast_jitter > 0.):
+        transform_list.append(transforms.ColorJitter(brightness=opt.brightness_jitter, contrast=opt.contrast_jitter))
 
     if convert:
         transform_list += [transforms.ToTensor()]
