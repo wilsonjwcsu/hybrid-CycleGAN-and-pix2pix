@@ -35,6 +35,7 @@ class Pix2PixModel(BaseModel):
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
             parser.add_argument('--target_real_label', type=float, default=1.0,
                     help='Discriminator real target. Set to <1.0 for one-sided label smoothing')
+            parser.add_argument('--lambda_gp', type=float, default=0.0, help='gradient penalty weighting, for wgangp')
 
         return parser
 
@@ -106,9 +107,15 @@ class Pix2PixModel(BaseModel):
         real_AB = torch.cat((self.real_A, self.real_B), 1)
         pred_real = self.netD(real_AB)
         self.loss_D_real = self.criterionGAN(pred_real, True)
-        # combine loss and calculate gradients
+        # combine loss
         self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
-        self.loss_D.backward()
+        # add gradient penalty, in case of wasserstein loss being used
+        if self.opt.gan_mode == 'wgangp':
+            self.loss_D += networks.cal_gradient_penalty(self.netD, real_AB, fake_AB, self.device, lambda_gp=self.opt.lambda_gp)
+            self.loss_D.backward(retain_graph=True)
+        else:
+            # calculate gradients
+            self.loss_D.backward()
 
     def backward_G(self):
         """Calculate GAN and L1 loss for the generator"""
