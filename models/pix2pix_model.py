@@ -3,6 +3,22 @@ from .base_model import BaseModel
 from . import networks
 
 
+def getImageSpectrum( im, ny, nx ):
+    """Calculates log-scaled magnitude of Fourier spectrum.
+        Returns image scaled from -1 to +1 range"""
+
+    im_fft = torch.rfft(im,2,normalized=True,onesided=False)
+    im_fft = torch.view_as_complex(im_fft)
+    im_fft = torch.sqrt(im_fft.real**2+im_fft.imag**2)
+    im_fft = torch.roll(im_fft,ny//2,2)
+    im_fft = torch.roll(im_fft,nx//2,3)
+    im_fft = torch.log(im_fft)
+    im_fft = im_fft - torch.min(im_fft)
+    im_fft = im_fft / torch.max(im_fft)
+    im_fft = im_fft*2. - 1.
+    return im_fft
+
+
 class Pix2PixModel(BaseModel):
     """ This class implements the pix2pix model, for learning a mapping from input images to output images given paired data.
 
@@ -36,6 +52,8 @@ class Pix2PixModel(BaseModel):
             parser.add_argument('--target_real_label', type=float, default=1.0,
                     help='Discriminator real target. Set to <1.0 for one-sided label smoothing')
             parser.add_argument('--lambda_gp', type=float, default=0.0, help='gradient penalty weighting, for wgangp')
+            parser.add_argument('--lambda_FFT', type=float, default=0.0, help='weight for Fourier spectrum matching L1 loss')
+    
 
         return parser
 
@@ -51,8 +69,12 @@ class Pix2PixModel(BaseModel):
             self.loss_names = ['G_L1']
         else:
             self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
+        if opt.lambda_FFT > 0:
+            self.loss_names.append('G_FFT')
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         self.visual_names = ['real_A', 'fake_B', 'real_B']
+        if opt.lambda_FFT > 0:
+            self.visual_names += ['real_B_FFT', 'fake_B_FFT']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
         if self.isTrain and not opt.netD == 'none':
             self.model_names = ['G', 'D']
@@ -129,8 +151,18 @@ class Pix2PixModel(BaseModel):
 
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+
         # combine loss and calculate gradients
         self.loss_G = self.loss_G_GAN + self.loss_G_L1
+
+        # calculate Fourier domain loss if requested
+        if self.opt.lambda_FFT > 0:
+            self.real_B_FFT = getImageSpectrum( self.real_B, nx=self.opt.crop_size, ny=self.opt.crop_size )
+            self.fake_B_FFT = getImageSpectrum( self.fake_B, nx=self.opt.crop_size, ny=self.opt.crop_size )
+            self.loss_G_FFT = self.criterionL1( self.fake_B_FFT, self.real_B_FFT ) * self.opt.lambda_FFT
+
+            self.loss_G += self.loss_G_FFT
+
         self.loss_G.backward()
 
     def optimize_parameters(self):
