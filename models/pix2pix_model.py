@@ -13,9 +13,6 @@ def getImageSpectrum( im, ny, nx ):
     im_fft = torch.roll(im_fft,ny//2,2)
     im_fft = torch.roll(im_fft,nx//2,3)
     im_fft = torch.log(im_fft)
-    im_fft = im_fft - torch.min(im_fft)
-    im_fft = im_fft / torch.max(im_fft)
-    im_fft = im_fft*2. - 1.
     return im_fft
 
 
