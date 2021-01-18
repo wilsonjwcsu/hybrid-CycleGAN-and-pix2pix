@@ -12,7 +12,7 @@ def getImageSpectrum( im, ny, nx ):
     im_fft = torch.sqrt(im_fft.real**2+im_fft.imag**2)
     im_fft = torch.roll(im_fft,ny//2,2)
     im_fft = torch.roll(im_fft,nx//2,3)
-    im_fft = torch.log(im_fft)
+    im_fft = torch.log(im_fft+1.e-7) # small offset to provent log(0)=NaN
     return im_fft
 
 
@@ -49,7 +49,8 @@ class Pix2PixModel(BaseModel):
             parser.add_argument('--target_real_label', type=float, default=1.0,
                     help='Discriminator real target. Set to <1.0 for one-sided label smoothing')
             parser.add_argument('--lambda_gp', type=float, default=0.0, help='gradient penalty weighting, for wgangp')
-            parser.add_argument('--lambda_FFT', type=float, default=0.0, help='weight for Fourier spectrum matching L1 loss')
+
+        parser.add_argument('--lambda_FFT', type=float, default=0.0, help='weight for Fourier spectrum matching L1 loss')
     
 
         return parser
