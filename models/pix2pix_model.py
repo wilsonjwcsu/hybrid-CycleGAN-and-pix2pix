@@ -163,7 +163,7 @@ class Pix2PixModel(BaseModel):
 
         self.loss_G.backward()
 
-    def optimize_parameters(self):
+    def optimize_parameters(self, enableGeneratorUpdate=True):
         self.forward()                   # compute fake images: G(A)
         # update D
         if not (self.opt.netD == 'none'):
@@ -173,8 +173,9 @@ class Pix2PixModel(BaseModel):
             self.optimizer_D.step()          # update D's weights
 
         # update G
-        if not (self.opt.netD == 'none'):
-            self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
-        self.optimizer_G.zero_grad()        # set G's gradients to zero
-        self.backward_G()                   # calculate graidents for G
-        self.optimizer_G.step()             # udpate G's weights
+        if enableGeneratorUpdate:
+            if not (self.opt.netD == 'none'):
+                self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
+            self.optimizer_G.zero_grad()        # set G's gradients to zero
+            self.backward_G()                   # calculate graidents for G
+            self.optimizer_G.step()             # udpate G's weights
