@@ -50,7 +50,7 @@ if __name__ == '__main__':
             epoch_iter += opt.batch_size
             model.set_input(data)         # unpack data from dataset and apply preprocessing
             if opt.gan_mode == 'wgangp':
-                model.optimize_parameters( enableGeneratorUpdate = (total_iters % opt.critic_updates) )
+                model.optimize_parameters( enableGeneratorUpdate = ((total_iters % opt.critic_updates)==(opt.critic_updates-1)) )
             else:
                 model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
 

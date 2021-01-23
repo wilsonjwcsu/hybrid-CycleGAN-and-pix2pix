@@ -84,8 +84,14 @@ class Pix2PixModel(BaseModel):
 
         if self.isTrain and not (opt.netD == 'none'):  
             # define a discriminator; conditional GANs need to take both input and output images; Therefore, #channels for D is input_nc + output_nc
+            if (self.opt.gan_mode == 'wgangp') and (self.opt.norm=='batch'):
+                # disable normalization in a wasserstein discriminator (critic)
+                opt.normD = 'none'
+            else:
+                opt.normD = opt.norm
+
             self.netD = networks.define_D(opt.input_nc + opt.output_nc, opt.ndf, opt.netD,
-                                          opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
+                                          opt.n_layers_D, opt.normD, opt.init_type, opt.init_gain, self.gpu_ids)
 
         if self.isTrain:
             # define loss functions
