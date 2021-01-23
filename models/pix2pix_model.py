@@ -8,11 +8,16 @@ def getImageSpectrum( im, ny, nx ):
         Returns image scaled from -1 to +1 range"""
 
     im_fft = torch.rfft(im,2,normalized=True,onesided=False)
+        
     im_fft = torch.view_as_complex(im_fft)
-    im_fft = torch.sqrt(im_fft.real**2+im_fft.imag**2)
+
+    im_fft = im_fft.real**2+im_fft.imag**2
+
     im_fft = torch.roll(im_fft,ny//2,2)
     im_fft = torch.roll(im_fft,nx//2,3)
-    im_fft = torch.log(im_fft+1.e-7) # small offset to provent log(0)=NaN
+
+    im_fft = torch.log(im_fft+0.001) # small offset to provent log(0)=NaN
+
     return im_fft
 
 
