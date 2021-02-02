@@ -52,7 +52,9 @@ class Pix2PixModel(BaseModel):
             parser.set_defaults(pool_size=0, gan_mode='vanilla')
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
             parser.add_argument('--target_real_label', type=float, default=1.0,
-                    help='Discriminator real target. Set to <1.0 for one-sided label smoothing')
+                    help='Discriminator real target. Set to <1.0 for label smoothing')
+            parser.add_argument('--target_fake_label', type=float, default=0.0,
+                    help='Discriminator fake target. Set to >0.0 for label smoothing')
             parser.add_argument('--lambda_gp', type=float, default=0.0, help='gradient penalty weighting, for wgangp')
 
         parser.add_argument('--lambda_FFT', type=float, default=0.0, help='weight for Fourier spectrum matching L1 loss')
@@ -106,7 +108,7 @@ class Pix2PixModel(BaseModel):
 
             if not (opt.netD == 'none'):
 
-                self.criterionGAN = networks.GANLoss(opt.gan_mode, target_real_label=opt.target_real_label).to(self.device)
+                self.criterionGAN = networks.GANLoss(opt.gan_mode, target_real_label=opt.target_real_label, target_fake_label=opt.target_fake_label).to(self.device)
                 # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
                 self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
                 self.optimizers.append(self.optimizer_D)
