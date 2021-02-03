@@ -54,6 +54,7 @@ class Pix2PixModel(BaseModel):
             parser.add_argument('--target_real_label', type=float, default=1.0,
                     help='Discriminator real target. Set to <1.0 for one-sided label smoothing')
             parser.add_argument('--lambda_gp', type=float, default=0.0, help='gradient penalty weighting, for wgangp')
+            parser.add_argument('--instance_noise', type=float, default=0.0, help='add noise to discriminator inputs to stabilize training')
 
         parser.add_argument('--lambda_FFT', type=float, default=0.0, help='weight for Fourier spectrum matching L1 loss')
     
@@ -132,10 +133,16 @@ class Pix2PixModel(BaseModel):
         """Calculate GAN loss for the discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
         fake_AB = torch.cat((self.real_A, self.fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
+        if self.opt.instance_noise > 0:
+            fake_AB += torch.randn(fake_AB.size()).to(self.device)*self.opt.instance_noise
+
         pred_fake = self.netD(fake_AB.detach())
         self.loss_D_fake = self.criterionGAN(pred_fake, False)
         # Real
         real_AB = torch.cat((self.real_A, self.real_B), 1)
+        if self.opt.instance_noise > 0:
+            real_AB += torch.randn(fake_AB.size()).to(self.device)*self.opt.instance_noise
+
         pred_real = self.netD(real_AB)
         self.loss_D_real = self.criterionGAN(pred_real, True)
         # combine loss
@@ -153,6 +160,8 @@ class Pix2PixModel(BaseModel):
         # First, G(A) should fake the discriminator
         if not (self.opt.netD == 'none'):
             fake_AB = torch.cat((self.real_A, self.fake_B), 1)
+            if self.opt.instance_noise > 0:
+                fake_AB += torch.randn(fake_AB.size()).to(self.device)*self.opt.instance_noise
             pred_fake = self.netD(fake_AB)
             self.loss_G_GAN = self.criterionGAN(pred_fake, True)
         else:
