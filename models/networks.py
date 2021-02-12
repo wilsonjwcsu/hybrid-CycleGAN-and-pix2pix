@@ -656,6 +656,7 @@ class Encoder(nn.Module):
             ]
         sequence += [torch.nn.Flatten()]
         sequence += [nn.Linear(8192,2048), nn.LeakyReLU(0.2,True)]
+        sequence += [nn.Linear(2048,2048)]
 
         self.model = nn.Sequential(*sequence)
 
