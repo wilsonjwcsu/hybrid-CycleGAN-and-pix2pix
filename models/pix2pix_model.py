@@ -117,21 +117,21 @@ class Pix2PixModel(BaseModel):
         if self.isTrain:
             # define loss functions
             self.criterionL1 = torch.nn.L1Loss()
-            self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+            self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.lr_G, betas=(opt.beta1, 0.999))
             self.optimizers.append(self.optimizer_G)
 
             if not (opt.netD == 'none'):
 
                 self.criterionGAN = networks.GANLoss(opt.gan_mode, target_real_label=opt.target_real_label, target_fake_label=opt.target_fake_label).to(self.device)
                 # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
-                self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+                self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr_D, betas=(opt.beta1, 0.999))
                 self.optimizers.append(self.optimizer_D)
 
             if opt.L1_mode == 'contrastive':
 
                 self.criterionContrastiveL1 = networks.GANLoss('contrastive', target_real_label=opt.target_real_label, target_fake_label=opt.target_fake_label).to(self.device)
                 # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
-                self.optimizer_C = torch.optim.Adam(self.netC.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+                self.optimizer_C = torch.optim.Adam(self.netC.parameters(), lr=opt.lr_D, betas=(opt.beta1, 0.999))
                 self.optimizers.append(self.optimizer_C)
 
     def set_input(self, input):
