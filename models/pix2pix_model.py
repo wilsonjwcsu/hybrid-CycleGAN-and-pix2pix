@@ -60,6 +60,7 @@ class Pix2PixModel(BaseModel):
 
         parser.add_argument('--L1_mode', type=str, default='direct', help='calculate L1 between fake and true B directly on images or in a contrastive encoder latent space (direct | contrastive)')
         parser.add_argument('--lambda_FFT', type=float, default=0.0, help='weight for Fourier spectrum matching L1 loss')
+        parser.add_argument('--unconditional_D', action='store_true', help='disables discriminator from seeing input image')
     
 
         return parser
@@ -107,8 +108,12 @@ class Pix2PixModel(BaseModel):
             else:
                 opt.normD = opt.norm
 
-            self.netD = networks.define_D(opt.input_nc + opt.output_nc, opt.ndf, opt.netD,
-                                          opt.n_layers_D, opt.normD, opt.init_type, opt.init_gain, self.gpu_ids)
+            if opt.unconditional_D:
+                self.netD = networks.define_D(opt.output_nc, opt.ndf, opt.netD,
+                                              opt.n_layers_D, opt.normD, opt.init_type, opt.init_gain, self.gpu_ids)
+            else:
+                self.netD = networks.define_D(opt.input_nc + opt.output_nc, opt.ndf, opt.netD,
+                                              opt.n_layers_D, opt.normD, opt.init_type, opt.init_gain, self.gpu_ids)
 
         if self.isTrain and opt.L1_mode == 'contrastive':
             self.netC = networks.define_D(opt.input_nc + opt.output_nc, opt.ndf, 'contrastive',
@@ -155,10 +160,15 @@ class Pix2PixModel(BaseModel):
         """Calculate GAN loss for the discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
         fake_AB = torch.cat((self.real_A, self.fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
+
         if self.opt.instance_noise > 0:
             fake_AB += torch.randn(fake_AB.size()).to(self.device)*self.opt.instance_noise
 
-        pred_fake = self.netD(fake_AB.detach())
+        if self.opt.unconditional_D:
+            pred_fake = self.netD(self.fake_B.detach())
+        else:
+            pred_fake = self.netD(fake_AB.detach())
+
         self.loss_D_fake = self.criterionGAN(pred_fake, False)
 
         if self.opt.L1_mode == 'contrastive':
@@ -167,10 +177,15 @@ class Pix2PixModel(BaseModel):
         
         # Real
         real_AB = torch.cat((self.real_A, self.real_B), 1)
+
         if self.opt.instance_noise > 0:
             real_AB += torch.randn(fake_AB.size()).to(self.device)*self.opt.instance_noise
 
-        pred_real = self.netD(real_AB)
+        if self.opt.unconditional_D:
+            pred_real = self.netD(self.real_B)
+        else:
+            pred_real = self.netD(real_AB)
+
         self.loss_D_real = self.criterionGAN(pred_real, True)
 
         if self.opt.L1_mode == 'contrastive':
@@ -200,7 +215,10 @@ class Pix2PixModel(BaseModel):
             fake_AB = torch.cat((self.real_A, self.fake_B), 1)
             if self.opt.instance_noise > 0:
                 fake_AB += torch.randn(fake_AB.size()).to(self.device)*self.opt.instance_noise
-            pred_fake = self.netD(fake_AB)
+            if self.opt.unconditional_D:
+                pred_fake = self.netD(self.fake_B)
+            else:
+                pred_fake = self.netD(fake_AB)
             self.loss_G_GAN = self.criterionGAN(pred_fake, True)
         else:
             self.loss_G_GAN = 0
