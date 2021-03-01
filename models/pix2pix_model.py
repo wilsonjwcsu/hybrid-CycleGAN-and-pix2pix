@@ -61,6 +61,7 @@ class Pix2PixModel(BaseModel):
         parser.add_argument('--L1_mode', type=str, default='direct', help='calculate L1 between fake and true B directly on images or in a contrastive encoder latent space (direct | contrastive)')
         parser.add_argument('--lambda_FFT', type=float, default=0.0, help='weight for Fourier spectrum matching L1 loss')
         parser.add_argument('--unconditional_D', action='store_true', help='disables discriminator from seeing input image')
+        parser.add_argument('--n_layers_C', type=int, default=3,help='n layers in contrastive encoder L1 network. Should be 3 for 128x128 images and 4 for 256x256 images.')
     
 
         return parser
@@ -117,7 +118,7 @@ class Pix2PixModel(BaseModel):
 
         if self.isTrain and opt.L1_mode == 'contrastive':
             self.netC = networks.define_D(opt.input_nc + opt.output_nc, opt.ndf, 'contrastive',
-                                          opt.n_layers_D, opt.normD, opt.init_type, opt.init_gain, self.gpu_ids)
+                                          opt.n_layers_C, opt.normD, opt.init_type, opt.init_gain, self.gpu_ids)
 
         if self.isTrain:
             # define loss functions

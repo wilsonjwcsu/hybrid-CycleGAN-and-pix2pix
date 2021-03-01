@@ -205,6 +205,8 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal'
         net = PixelDiscriminator(input_nc, ndf, norm_layer=norm_layer)
     elif netD == 'contrastive': # contrastiv loss w/ Siamese discriminator
         net = ContrastiveDiscriminator(input_nc//2, ndf, n_layers_D, norm_layer=norm_layer)
+    elif netD == 'full':    # not a PatchGAN
+        net = FullDiscriminator_SN( input_nc )
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % netD)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -808,6 +810,7 @@ class Encoder(nn.Module):
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
 
+
         kw = 4
         padw = 1
         sequence = [nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]
@@ -824,6 +827,49 @@ class Encoder(nn.Module):
         sequence += [torch.nn.Flatten()]
         sequence += [nn.Linear(8192,2048), nn.LeakyReLU(0.2,True)]
         sequence += [nn.Linear(2048,2048)]
+
+        self.model = nn.Sequential(*sequence)
+
+    def forward(self, input):
+        """Standard forward."""
+        return self.model(input)
+
+class FullDiscriminator_SN(nn.Module):
+    """Defines a full discriminator (not a PatchGAN), using spectral norm"""
+
+    def __init__(self, input_nc, ndf=64, n_layers=5, norm_layer=nn.BatchNorm2d):
+        """Construct a convolutional encoder
+
+        Parameters:
+            input_nc (int)  -- the number of channels in input images
+            ndf (int)       -- the number of filters in the last conv layer
+            n_layers (int)  -- the number of conv layers in the discriminator. For a 128x128 image, this should be 5
+            norm_layer      -- normalization layer
+        """
+        super(FullDiscriminator_SN, self).__init__()
+        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+
+        print("full discriminator")
+
+        kw = 4
+        padw = 1
+        sequence = [spectral_norm(nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw)), nn.LeakyReLU(0.2, True)]
+        nf_mult = 1
+        nf_mult_prev = 1
+        for n in range(1, n_layers):  # gradually increase the number of filters
+            nf_mult_prev = nf_mult
+            nf_mult = min(2 ** n, 8)
+            sequence += [
+                spectral_norm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw, bias=use_bias)),
+                nn.LeakyReLU(0.2, True)
+            ]
+        sequence += [torch.nn.Flatten()]
+        sequence += [spectral_norm(nn.Linear(8192,2048)), nn.LeakyReLU(0.2,True)]
+        sequence += [spectral_norm(nn.Linear(2048,2048)), nn.LeakyReLU(0.2,True)]
+        sequence += [spectral_norm(nn.Linear(2048,1))]
 
         self.model = nn.Sequential(*sequence)
 
